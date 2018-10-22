@@ -1,0 +1,120 @@
+<html><head><title>XQCT - Marine chart viewer</title>
+</head><body>
+<h1>XQCT - Marine Chart Viewer</h1>
+<h2>Introduction</h2>
+<p>This program displays marine charts of the UK with tide information
+overlaid.
+</p>
+
+<h2>Tide Information</h2>
+
+<p>There are two types of symbols overlaid on the chart: bars which display
+the current tidal level and arrows which display the current tidal direction
+and speed. As the time is changed the tidal levels and directions also
+change.
+</p>
+
+<p>Tidal levels are shown as a box where the bottom is the mean low water
+level on a spring tide and the top is the mean high water level on a spring
+tide. The bar across the middle shows the current tide level at the chosen
+time.  The current level may be above or below the high/low marks because
+the values come from different sources.  The high/low marks are taken from
+the Admiralty charts and the current mark is calculated mathematically and
+so they may be on different datums (ie. the baseline is different).
+More information about a Tidal Level can be obtained by right-clicking on it
+and selecting its name from the context menu.
+</p>
+
+<p>Tidal directions are shown at points known as Tidal Diamonds.  These
+are points where the speed and direction of the current can be calculated
+at the chosen time. You will see that as the time approaches high water
+the length of the arrow reaches a maximum and as the time approaches low
+water the length of the arrow is at its shortest.  These points are known
+as slack water. As the tide turns the direction of the arrow changes from
+predominantly one way to predominantly the opposite direction. However at
+low tide slack water the arrow may point at intermediate directions. This
+does not mean the current is flowing in that direction; it is simply an
+artefact of the way the calculations are performed. Be careful when reading
+directions at this time.
+More information about a Tidal Diamond can be obtained by right-clicking on it
+and selecting its name from the context menu.
+</p>
+
+<p>Please note that the length of the arrow at high tide will change
+throughout the week. On a spring tide the high water mark is at its highest
+which means that more water has flowed in and thus the current is stronger.
+On a neap tide the current is weaker. The length of the arrow indicates the
+speed of the current (it is directly proportional to the speed in knots) so
+it follows that at spring tides it will be longer than at neap tides.
+</p>
+
+<h2>Changing the chart</h2>
+<p>A new chart can be loaded from the option in the File menu.
+A list of recent charts is available for quick access to the last ten displayed.
+A new chart can also be chosen by right-clicking to get a context menu at
+any point on the chart. A menu will display all the other charts which cover
+the location where the mouse clicked.
+</p>
+
+<h2>Moving around the chart</h2>
+<p>Use the scroll bars to move around a chart which is larger than the screen.
+The mouse wheel cannot be used to scroll up or down because it is used to
+zoom instead.  It is better to simply press the mouse button on the chart
+and drag it around.  If you are moving the mouse when the mouse button is
+released the chart will continue to move in the same direction, just like
+spinning a globe. To stop the movement simply click (press/release) the
+mouse button on the chart. To prevent the movement just hold the mouse steady
+briefly before releasing the button.
+</p>
+
+<h2>Zooming in or out</h2>
+<p>The options in the View menu can be used to display the chart
+zoomed in to full resolution or zoomed out to half, quarter or eighth
+resolution. The same effect can be achieved using the mouse wheel.
+</p>
+
+<h2>Changing the date/time</h2>
+<p>To change the starting date use the option in the Edit menu.
+The display changes to show the tide conditions at the time 00:00
+on the specified day.
+Use the slider underneath the chart to change the time.
+It moves in 15 minute intervals using the left/right cursor keys
+or hourly intervals using the page-up/down keys.
+It can be dragged to any time, up to a maximum of 3 days from the
+starting date.
+</p>
+
+<h2>Saving the chart</h2>
+<p>The chart can be saved using the option in the File menu.
+This will save the whole chart, but only the chart, not the tidal
+information.  If you want the tidal information too then print it.
+</p>
+
+<h2>Printing the chart</h2>
+<p>The chart can be printed using the option in the File menu.
+This will print the section of the chart which is currently visible
+in the window.  It will also have the tidal information overlaid,
+and the chosen date and time in the top left corner.  The page will
+be landscape or portrait automatically as appropriate for the window
+size.
+</p>
+
+<h2>Author</h2>
+<p>Andrew Brooks &lt;arb@sat.dundee.ac.uk&gt; July 2010</p>
+
+<hr>
+
+<h2>Acknowledgements</h2>
+<p>The tidal level information has been read from Admiralty charts.
+The tidal stream information has been read from Admiralty charts.
+The tidal calculations are performed internally by the software.
+The tide tables are provided by a mixture of sources including: xtide,
+wxtide32, and other internet sources.  The tide calculations are
+performed externally by the xtide program.  The libtcd library is
+used internally to find the locations of tide stations.  The
+kautoconfig library is used internally for configuration.
+</p>
+
+<!-- Document version 1.01 arb Fri Jul 30 19:08:56 BST 2010 -->
+
+</body></html>
