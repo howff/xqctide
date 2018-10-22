@@ -1,0 +1,714 @@
+/* > xqct.cpp
+ * 1.00 arb Sat Jul 10 19:47:16 BST 2010 - Finished most basic version.
+ * 0.01 arb Mon May 17 10:20:36 BST 2010
+ */
+
+static const char SCCSid[] = "@(#)xqct.cpp      1.00 (C) 2010 arb QuickChart display";
+
+
+/*
+ * Displays a georeferenced QuickChart with tidal information superimposed.
+ */
+
+
+/*
+ * Configuration:
+ * Define RESTRICT_TIDAL_DIAMONDS_TO_SELECTED_CHART if you want to
+ *  only load tidal diamonds which are defined to be on the loaded chart.
+ *  Sometimes larger scale charts have diamonds for the same area which
+ *  it can be useful to load and compare but normally they are worse so
+ *  you may want to define this to get rid of them.
+ * Define RESTRICT_TIDAL_LEVELS_TO_SELECTED_CHART similarly.
+ * Define ARROW_SCALE to make them visible.
+ * Define DEFAULT_CHART as first chart to load
+ * Define DEFAULT_TIDE_DATA_DIR as directory containing .C1 and .T1 files
+ * Define DEFAULT_HARMONICS_FILE as 
+ */
+#define DEFAULT_TL_MUST_BE_ON_CHART    false // could be on other charts
+#define DEFAULT_TL_MUST_BE_UNIQUE      false // 
+#define DEFAULT_TS_MUST_BE_ON_CHART    false // could be on other charts
+#define DEFAULT_TS_MUST_BE_UNIQUE      false // 
+#define DEFAULT_TS_MUST_HAVE_KNOWN_REF true // pointless if TS ref station is unknown
+#define ARROW_SCALE 40
+#define DEFAULT_CHART          "BA1481_1.qct"
+#define DEFAULT_CHART_DIR      "/users/local/arb/h/memorymap/v-g"
+#define DEFAULT_TIDE_DATA_DIR  "tidedata"
+#define DEFAULT_HARMONICS_FILE "harmonics-dwf-20091227-nonfree.tcd"
+#define DEFAULT_ZOOM_OUT_LEVEL 1
+
+/*
+ * Bugs:
+ * Arrows are tiny for 10 July 2010
+ * Check if an arrow is visible before bothering to calculate new bearing???
+ * Some black pixels left behind not erased properly when arrow turns FIXED
+ * Slider init is wrong so going backwards recalculates every step
+ * Still some jumps/sticky bits in bearing when new HW time is used,
+ *  maybe caused by tables which don't wrap properly;
+ *  need to think about wraparound or extrapolation rather than clipping.
+ * When two arrows are visible on the same screen then the redraw flickers
+ *  (not sure why since the redraw rectangles are small)
+ * WARNING asking for tide at offset 968871.120000 hrs probably caused by
+ * the simple-minded search for high tide rather than calculating explicitly.
+ * Speed up TCD using a QDict cache of n,lat,lon rather than a prev String.
+ * Speed up moon phase - if jtime within synodic month of last jtime.
+ */
+
+/*
+ * To do:
+ * Status bar to show lat,lon in decimal and in degrees/mins/secs
+ * Would be nice to have: DEM for underwater, wreck overlays, ...
+ * Plot tide ports and show tide graphs for all visible ports
+ * Use the tidal height info from the C1 files somehow, plot as heights in boxes
+ * Better way of setting date easily rather than QDateEdit
+ *   should remember last date used not revert to today
+ *   maybe use a day slider at the bottom
+ * Different range of date offset by slider (3 days?)
+ * Zoom in/out
+ * Way of selecting other charts
+ * Store date and scroll position in a settings file
+ * Drag panning should have a velocity and keep moving
+ * Deduce from map name (BAxxxx_[1-9]) the tide and diamonds (???)
+ */
+
+
+#include <qaccel.h>
+#include <qapplication.h>
+#include <qcolordialog.h>
+#include <qdragobject.h>
+#include <qfile.h>
+#include <qfiledialog.h>
+#include <qgrid.h>
+#include <qinputdialog.h>
+#include <qkeycode.h>
+#include <qlabel.h>
+#include <qlayout.h>
+#include <qmenubar.h>
+#include <qmessagebox.h>
+#include <qpainter.h>
+#include <qpixmap.h>
+#include <qpopupmenu.h>
+#include <qregexp.h>
+#include <qsettings.h>
+#include <qslider.h>
+#include <qstatusbar.h>
+#include <qtimer.h>
+#include <qtoolbar.h>
+#include <qtoolbutton.h>
+#include <qvbox.h>
+#include <qwhatsthis.h>
+
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include "satlib/dundee.h"
+#include "satqt/qapp.h"        // for UNICODE_ definitions
+#include "satqt/helpdialog.h"
+#include "satqt/mrumenu.h"
+#include "satqt/inputdialog.h"
+#include "osmap/qct.h"
+#include "qctimage.h"
+#include "tidedata.h"
+#include "tidecalc.h"
+#include "xqct.h"
+
+#define UNUSED(x) ((x)=(x)) /* keep compiler quiet */
+
+static const char * progname = "XQCT";
+static const char *LOG_E = "error";
+static const char *LOG_I = "xqct";
+
+
+/* ----------------------------------------------------------------------------
+ * For checking whether two tidal locations are close enough that they would
+ * overlap or in fact are identical duplicates and so only one is necessary.
+ * XXX should get pixel resolution in degrees from QCT and return closeEnough
+ * if with so many pixels rather than so many degrees.
+ */
+static double
+distanceBetween(double lat0, double lon0, double lat1, double lon1)
+{
+	// Should calculate Great Circle distance, but OK for close points
+	// Don't bother to take the square root for speed.
+	return ((lat1-lat0)*(lat1-lat0) + (lon1-lon0)*(lon1-lon0));
+}
+
+static bool
+closeEnough(double distSquared)
+{
+	// If absolute difference is less than 0.00045 then close (~50 meters of latitude)
+	// return (distSquared < (0.00045 * 0.00045));
+	// If absolute difference is less than 0.0009 then close (~100 meters of latitude)
+	// return (distSquared < (0.0009 * 0.0009));
+	// Some of the tidal stream locations are so far off that we need to return this to filter them:
+	return (distSquared < (0.00155 * 0.00155));
+}
+
+
+/* ----------------------------------------------------------------------------
+ * Main window
+ */
+DisplayWindow::DisplayWindow()
+    : QMainWindow( 0, "xqct main window", WDestructiveClose)
+{
+    //int id;
+
+	settings = new QSettings();
+	settings->insertSearchPath(QSettings::Unix, getenv(SYSCONFIGENV));
+	settings->insertSearchPath(QSettings::Windows, "/DSS");
+	int wx = settings->readNumEntry("/xqct/x", -1);
+	int wy = settings->readNumEntry("/xqct/y", -1);
+	if (wx != -1 && wy != -1)
+		move(wx, wy);
+	wx = settings->readNumEntry("/xqct/width", -1);
+	wy = settings->readNumEntry("/xqct/height", -1);
+	if (wx != -1 && wy != -1)
+		resize(wx, wy);
+	cfg_TLmustBeOnChart = settings->readBoolEntry("/xqct/TLmustBeOnChart", DEFAULT_TL_MUST_BE_ON_CHART);
+	cfg_TLmustBeUnique = settings->readBoolEntry("/xqct/TLmustBeUnique", DEFAULT_TL_MUST_BE_UNIQUE);
+	cfg_TSmustBeOnChart = settings->readBoolEntry("/xqct/TSmustBeOnChart", DEFAULT_TS_MUST_BE_ON_CHART);
+	cfg_TSmustBeUnique = settings->readBoolEntry("/xqct/TSmustBeUnique", DEFAULT_TS_MUST_BE_UNIQUE);
+	cfg_TSmustHaveKnownRef = settings->readBoolEntry("/xqct/TSmustHaveKnownRef", DEFAULT_TS_MUST_HAVE_KNOWN_REF);
+	cfg_zoomOutLevel = settings->readNumEntry("/xqct/zoomOutLevel", DEFAULT_ZOOM_OUT_LEVEL);
+
+	// Create "File" menu
+    QPopupMenu * fileMenu = new QPopupMenu( this );
+    menuBar()->insertItem( "&File", fileMenu );
+	mruMenu = new MRUMenu(this, settings, "xqct");
+//	mruMenu->setShortcuts(true);
+    connect(mruMenu, SIGNAL(activatedText(const QString &)), this, SLOT(loadMapFile(const QString &)));
+    fileMenu->insertItem( "&Open Map...", this, SLOT( loadMap() ), CTRL+Key_O );
+	fileMenu->insertItem( "&Open Recent Map",  mruMenu );
+    fileMenu->insertItem( "&Load Tide Tables", this, SLOT( loadTide() ), CTRL+Key_T );
+
+    fileMenu->insertItem( "&Save Map As...", this, SLOT( save() ), CTRL+Key_S );
+    fileMenu->insertSeparator();
+    fileMenu->insertItem( "&Quit", this, SLOT( quit() ), CTRL+Key_Q );
+
+
+	editMenu = new QPopupMenu( this );
+	menuBar()->insertItem( "&Edit", editMenu );
+	int id = editMenu->insertItem( "&Date", this, SLOT( editDate() ), CTRL+Key_D);
+	// XXX whatsThis
+
+
+	// Create "View" menu
+	viewMenu = new QPopupMenu( this );
+	menuBar()->insertItem( "&View", viewMenu );
+
+	tidalLevelMenu = new QPopupMenu(viewMenu);
+	connect(tidalLevelMenu, SIGNAL(aboutToShow()), this, SLOT(showTidalLevelMenu()));
+	id = viewMenu->insertItem("Tidal Level Locations", tidalLevelMenu);
+
+	tidalStreamMenu = new QPopupMenu(viewMenu);
+	connect(tidalStreamMenu, SIGNAL(aboutToShow()), this, SLOT(showTidalStreamMenu()));
+	id = viewMenu->insertItem("Tidal Diamond", tidalStreamMenu);
+
+
+	// Create "Zoom" menu
+	// XXX
+	id = viewMenu->insertItem("Full size", this, SLOT(changeZoom(int)), 0, 1);
+	id = viewMenu->insertItem("Half size", this, SLOT(changeZoom(int)), 0, 2);
+	id = viewMenu->insertItem("Quarter size", this, SLOT(changeZoom(int)), 0, 4);
+
+	// Create "Help" menu
+	QPopupMenu * helpMenu = new QPopupMenu( this );
+	menuBar()->insertSeparator();
+	menuBar()->insertItem( "&Help", helpMenu );
+
+	helpMenu->insertItem( "&About", this, SLOT(about()), Key_F1 );
+	helpMenu->insertItem( "&Manual", this, SLOT(helpmanual()) );
+	helpMenu->insertSeparator();
+	helpMenu->insertItem( "What's &This", this, SLOT(whatsThis()), SHIFT+Key_F1 );
+
+
+	// Main window contains a vertical box which groups:
+	// the map image, a slider, a label (status bar is at bottom)
+	QVBox *main = new QVBox(this);
+
+	qctimage = new QCTImage(main);
+	// for information:
+	//qctimage->getQct()->printMetadata(stdout);
+	connect(qctimage, SIGNAL(location(double,double,long)), this, SLOT(mouse_moved(double,double)));
+
+	QSlider *slider;
+	slider = new QSlider(0, 600, 6, 300, QSlider::Horizontal, main, "slider");
+	slider->setFocus();
+	slider->setTickInterval(6);
+	slider->setTickmarks(QSlider::Below);
+	connect(slider, SIGNAL(valueChanged(int)), this, SLOT(slider_moved(int)));
+
+	// Coordinate display
+	QHBox *infobox = new QHBox(main);
+	QLabel *ooh = new QLabel(infobox, "ooh"); ooh->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+	QLabel *aah = new QLabel(infobox, "aah"); aah->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+
+	// Internal data
+	tidalStreamList.clear();
+	tidalStreamList.setAutoDelete(true);
+	tidalLevelList.clear();
+	tidalLevelList.setAutoDelete(true);
+	tideCalcPtr = new TideCalc();
+	moonCalcPtr = new MoonCalc();
+	tideCalcPtr->loadTideDatabase(DEFAULT_HARMONICS_FILE);
+	loadMapFile(DEFAULT_CHART);
+	loadTideDir(DEFAULT_TIDE_DATA_DIR);
+	slider_jtime = date_to_jtime(2010, 5, 5, 12, 0.0);
+
+    setCentralWidget( main );
+
+	statusBar()->message("Ready", 1000);
+}
+
+
+DisplayWindow::~DisplayWindow()
+{
+	settings->writeEntry("/xqct/x", x());
+	settings->writeEntry("/xqct/y", y());
+	settings->writeEntry("/xqct/width", width());
+	settings->writeEntry("/xqct/height", height());
+	settings->writeEntry("/xqct/TLmustBeOnChart",    cfg_TLmustBeOnChart);
+	settings->writeEntry("/xqct/TLmustBeUnique",     cfg_TLmustBeUnique);
+	settings->writeEntry("/xqct/TSmustBeOnChart",    cfg_TSmustBeOnChart);
+	settings->writeEntry("/xqct/TSmustBeUnique",     cfg_TSmustBeUnique);
+	settings->writeEntry("/xqct/TSmustHaveKnownRef", cfg_TSmustHaveKnownRef);
+	settings->writeEntry("/xqct/zoomOutLevel",       cfg_zoomOutLevel);
+
+	delete settings;
+
+	delete tideCalcPtr;
+	delete moonCalcPtr;
+}
+
+
+/* ----------------------------------------------------------------------------
+ */
+void DisplayWindow::slider_moved(int pos)
+{
+	// currently 601 pixels wide so mid (current time) is 300
+	// and increments of 10 minutes each pixel
+	int h = (pos - 300) / 6;
+	int m = ((pos - 300) - h*6)*10;
+	// for now we will assume scale is simply ref time in middle
+	// and range -6 to +6 hours
+	// (ie 300 pixels is 6*60=360mins)
+	double mins = (pos - 300) / 300.0 * 360.0;
+	debugf(1, "slider_moved pos %d is mins %f (%d:%m)\n", pos, mins, h, m);
+
+	plotTidalStreams(mins);
+}
+
+
+/* ----------------------------------------------------------------------------
+ */
+void
+DisplayWindow::mouse_moved(double lat, double lon)
+{
+	//debugf(1, "MOUSE %f %f\n", lat, lon);
+}
+
+
+/* ----------------------------------------------------------------------------
+ */
+void
+DisplayWindow::changeZoom(int id)
+{
+	cfg_zoomOutLevel = id;
+	loadMapFile(mapFilename);
+}
+
+
+/* ----------------------------------------------------------------------------
+ * Menu listing all Tidal Levels (where tide heights can be calculated)
+ */
+void
+DisplayWindow::showTidalLevelMenu()
+{
+	int id, nn = 0;
+	tidalLevelMenu->clear();
+	for ( TidalLevel *tlpiter = tidalLevelList.first(); tlpiter; tlpiter = tidalLevelList.next() )
+	{
+		QString label(tlpiter->getName());
+		id = tidalLevelMenu->insertItem(label, this, SLOT(tidalLevelMenuSelected(int)), 0, nn++);
+	}
+	if (!nn)
+		tidalLevelMenu->setItemEnabled(tidalLevelMenu->insertItem("No Tidal Levels loaded or none on this chart"), false);
+}
+
+void
+DisplayWindow::tidalLevelMenuSelected(int id)
+{
+	if (id < 0 || id > tidalLevelList.count()-1)
+		return;
+	qctimage->scrollToLatLon(tidalLevelList.at(id)->getLat(),
+		tidalLevelList.at(id)->getLon());
+}
+
+
+/* ----------------------------------------------------------------------------
+ * Menu listing all Tidal Streams (Tidal Diamonds)
+ */
+void
+DisplayWindow::showTidalStreamMenu()
+{
+	int id, nn = 0;
+	tidalStreamMenu->clear();
+	for ( TidalStream *tspiter = tidalStreamList.first(); tspiter; tspiter = tidalStreamList.next() )
+	{
+		QString label(tspiter->getName());
+		label += " on " + tspiter->getChart();
+		label += " via " + tspiter->getRef();
+		id = tidalStreamMenu->insertItem(label, this, SLOT(tidalStreamMenuSelected(int)), 0, nn++);
+	}
+	if (!nn)
+		tidalStreamMenu->setItemEnabled(tidalStreamMenu->insertItem("No Tidal Streams loaded or none on this chart"), false);
+}
+
+void
+DisplayWindow::tidalStreamMenuSelected(int id)
+{
+	if (id < 0 || id > tidalStreamList.count()-1)
+		return;
+	qctimage->scrollToLatLon(tidalStreamList.at(id)->getLat(),
+		tidalStreamList.at(id)->getLon());
+}
+
+
+/* ----------------------------------------------------------------------------
+ */
+void DisplayWindow::loadMap()
+{
+	QString qctdir(DEFAULT_CHART_DIR);
+	QString qctname( QFileDialog::getOpenFileName(qctdir, "Maps and charts (*.qct)", this) );
+    if (qctname.isEmpty())
+        return;
+	loadMapFile(qctname);
+}
+
+void DisplayWindow::loadMapFile(const QString &qctname)
+{
+	debugf(1, "loadMapFile %s\n",(const char*)qctname);
+	qctimage->unload();
+	if (qctimage->load(qctname, cfg_zoomOutLevel))
+	{
+	    mruMenu->add(qctname);
+		mapFilename = qctname;
+	}
+	//qctimage->update();             // XXX which update is best??
+	qctimage->updateContents();
+	debugf(1, "setCaption '%s'\n", (const char*)qctimage->getQct()->getName());
+	setCaption(QString("XQCT - ") + qctimage->getQct()->getName());
+}
+
+
+/* ----------------------------------------------------------------------------
+ */
+void DisplayWindow::loadTide()
+{
+	//QString tidedir("/users/local/arb/Downloads/tide/tidedata");
+	QString tidedir(".");
+	QString tidename( QFileDialog::getOpenFileName(tidedir, "Tide data (*.C1 *.T1)", this) );
+    if (tidename.isEmpty())
+        return;
+	tidedir = QFileInfo(tidename).dirPath(true);
+	loadTideDir(tidedir);
+}
+
+
+/* ----------------------------------------------------------------------------
+ */
+void DisplayWindow::loadTideDir(const QString &dirname)
+{
+	debugf(1, "loadTideDir %s\n", (const char*)dirname);
+	QDir dir(dirname);
+
+	// Find all the files for year 2010 (have last two digits 10)
+	// Names BAnnTyy.T1 and BAnnCyy.C1
+	QStringList c1list = dir.entryList("*C10.C1");
+	QStringList t1list = dir.entryList("*T10.T1");
+	
+	QStringList::Iterator diriter;
+	QString line;
+
+	// Read the Tide Levels files (*.T1) containing mean high/low water
+	tidalLevelList.clear();
+	for (diriter = t1list.begin(); diriter != t1list.end(); ++diriter)
+	{
+		QFile file(dirname+"/"+(*diriter));
+		debugf(1, "load %s\n", (const char*)file.name());
+		if (!file.open(IO_ReadOnly))
+			continue;
+		while (file.readLine(line, 9999) > 0)
+		{
+			//debugf(1, "TL::%s", (const char*)line);
+			TidalLevel *tlp, *tlpiter;
+			tlp = new TidalLevel(line);
+			if (!tlp->isOk())
+			{
+				delete tlp;
+				continue;
+			}
+			// Ignore tide levels not on this chart
+			if (cfg_TLmustBeOnChart && (qctimage->getQct()->getIdentifier() != tlp->getChart()))
+			{
+				//debugf(1, "TL: %s != %s\n", (const char*)qctimage->getQct()->getIdentifier(), (const char*)tlp->getChart());
+				delete tlp;
+				continue;
+			}
+			// Ignore tide levels with coords outside boundary of this chart
+			if (!qctimage->getQct()->coordInsideMap(tlp->getLat(), tlp->getLon()))
+			{
+				//debugf(1, "TL: %s at %f,%f is not on this chart\n", (const char*)tlp->getName(), tlp->getLat(), tlp->getLon());
+				delete tlp;
+				continue;
+			}
+			// Check for duplicates, just ignore the new one
+			// assuming they actually are identical and first is ok
+			if (cfg_TLmustBeUnique)
+				for ( tlpiter = tidalLevelList.first(); tlpiter; tlpiter = tidalLevelList.next() )
+			{
+				if (closeEnough(distanceBetween(tlpiter->getLat(), tlpiter->getLon(), tlp->getLat(), tlp->getLon())))
+				{
+					debugf(2,"  IGNORE %s - same location as %s\n", (const char*)tlp->getName(), (const char*)tlpiter->getName());
+					delete tlp;
+					tlp = 0;
+					break;
+				}
+			}
+			if (tlp == 0)
+				continue;
+			debugf(1, "Tide Level: Spring Tide range %.1f to %.1f at %s\n", tlp->getMLWS(), tlp->getMHWS(), (const char*)tlp->getName());
+			debugf(1, "Tide Level: Neap Tide   range %.1f to %.1f at %s\n", tlp->getMLWN(), tlp->getMHWN(), (const char*)tlp->getName());
+			tidalLevelList.append(tlp);
+		}
+		file.close();
+	}
+
+	// Read the Tidal Streams files (*.C1) containing tidal diamonds
+	tidalStreamList.clear();
+	for (diriter = c1list.begin(); diriter != c1list.end(); ++diriter)
+	{
+		QFile file(dirname+"/"+(*diriter));
+		debugf(1, "load %s\n", (const char*)file.name());
+		if (!file.open(IO_ReadOnly))
+			continue;
+		while (file.readLine(line, 9999) > 0)
+		{
+			TidalStream *tsp, *tspiter;
+			tsp = new TidalStream(line);
+			if (!tsp->isOk())
+			{
+				delete tsp;
+				continue;
+			}
+			// Ignore tide streams not on this chart
+			// Can be useful to see all diamonds from other charts though
+			// (assuming they are within the chart boundary checked below)
+			if (cfg_TSmustBeOnChart && (qctimage->getQct()->getIdentifier() != tsp->getChart()))
+			{
+				//printf("TS: %s != %s\n", (const char*)qctimage->getQct()->getIdentifier(), (const char*)ts.getChart());
+				delete tsp;
+				continue;
+			}
+			// Ignore tide levels off this chart
+			if (!qctimage->getQct()->coordInsideMap(tsp->getLat(), tsp->getLon()))
+			{
+				//printf("TS: %s at %f,%f is not on this chart\n", (const char*)ts.getName(), ts.getLat(), ts.getLon());
+				delete tsp;
+				continue;
+			}
+			//debugf(1, "READ %s\n", (const char*)line);
+			debugf(1, "Tidal Stream %s referenced to %s at %sW (%f, %f)\n", (const char*)tsp->getName(), (const char*)tsp->getRef(), tsp->refAtHW()? "H":"L", tsp->getLat(), tsp->getLon());
+			// Ignore tide streams if ref station is not in tide database
+			if (cfg_TSmustHaveKnownRef)
+			{
+				double lat, lon;
+				if (!tideCalcPtr->getStationLocation(tsp->getRef(), &lat, &lon))
+				{
+					log_message(LOG_I, stderr, "TidalStream ignored because %s is not a recognised location", (const char*)tsp->getRef());
+					debugf(2, "  IGNORED - ref station is not in tide database\n");
+					delete tsp;
+					continue;
+				}
+			}
+			// See if there's already one at the location
+			if (cfg_TSmustBeUnique)
+				for ( tspiter = tidalStreamList.first(); tspiter; tspiter = tidalStreamList.next() )
+			{
+				if (closeEnough(distanceBetween(tspiter->getLat(), tspiter->getLon(), tsp->getLat(), tsp->getLon())))
+				{
+					// If both have the same reference station and location then they are
+					// hopefully identical (or we can't tell which is best) so ignore new one
+					if (tspiter->getRef() == tsp->getRef())
+					{
+						debugf(2, "  IGNORED - same location AND ref station, so identical\n");
+						delete tsp;
+						tsp = 0;
+						break;
+					}
+					// Find out which one has the closest reference station
+					double reflat0, reflon0, reflat1, reflon1;
+					double refdist1, refdist2;
+					debugf(2, "  compare %s\n", (const char*)tsp->getRef());
+					tideCalcPtr->getStationLocation(tsp->getRef(), &reflat0, &reflon0);
+					debugf(2, "  to      %s\n", (const char*)tspiter->getRef());
+					tideCalcPtr->getStationLocation(tspiter->getRef(), &reflat1, &reflon1);
+					refdist1 = distanceBetween(reflat0, reflon0, tsp->getLat(), tsp->getLon()); // new
+					refdist2 = distanceBetween(reflat1, reflon1, tsp->getLat(), tsp->getLon()); // old
+					debugf(2, "  REJECT - already in the list %f vs %f\n", refdist1, refdist2);
+					// XXX choose whether to reject the new one or delete the existing one
+					// Remove the one which is furthest away
+					// Could also deliberately choose the one with the same reference station
+					// ref station used by the nearest suborbinate station
+					// (eg. if this tidal diamond is close to Dundee and Dundee is referenced to Aberdeen)
+					if (refdist2 > refdist1)
+					{
+						// Remove the old one it is further away
+						// Could use replace but then the append below would have to be skipped
+						// so easiest to just remove the old one here and fall through to append
+						debugf(2, "    remove old one\n");
+						tidalStreamList.removeRef(tspiter);
+					}
+					else
+					{
+						// Ignore the new one it is further away
+						debugf(2, "    ignore new one\n");
+						delete tsp;
+						tsp = 0;
+					}
+					break;
+				}
+			}
+			if (tsp == 0)
+				continue;
+			tidalStreamList.append(tsp);
+		}
+		file.close();
+	}
+
+	debugf(1, "Final list of Tidal Level stations on this chart:\n");
+	for ( TidalLevel *tlpiter = tidalLevelList.first(); tlpiter; tlpiter = tidalLevelList.next() )
+	{
+		debugf(2, "  %s at %f %f\n", (const char*)tlpiter->getName(), tlpiter->getLat(), tlpiter->getLon());
+	}
+
+	debugf(1, "Final list of Tidal Streams on this chart:\n");
+	for ( TidalStream *tspiter = tidalStreamList.first(); tspiter; tspiter = tidalStreamList.next() )
+	{
+		debugf(2, "  %s at %f %f ref %s\n", (const char*)tspiter->getName(), tspiter->getLat(), tspiter->getLon(), (const char*)tspiter->getRef());
+	}
+}
+
+
+/* ----------------------------------------------------------------------------
+ */
+void
+DisplayWindow::plotTidalStreams(double minsOffset)
+{
+	TidalStream *tsp;
+	double jtime = date_to_jtime(2010, 5, 5, 12, 0.0); // XXX
+	float tideHeight;
+	double jtimeHW;
+	float lat, lon;
+	float bearing, rate, length;
+	double minsFromHW;
+	double lunarPhaseFraction;
+
+	jtime = slider_jtime;
+	jtime += minsOffset;
+
+	debugf(1, "plotTidalStreams at offset %f = %s\n", minsOffset, jctime(jtime));
+
+	// XXX This shouldn't be done here
+	QString msg(jctime(jtime));
+	statusBar()->message(msg);
+
+	// Find how far through the moon's cycle we are
+	lunarPhaseFraction = moonCalcPtr->fractionFromSpringToNeap(jtime);
+
+	// Remove all previously plotted arrows and refresh those screen areas
+//	qctimage->setUpdatesEnabled(false);
+	qctimage->unplotArrows();
+
+	// Calculate new direction of all arrows and plot them
+	for (tsp = tidalStreamList.first(); tsp; tsp = tidalStreamList.next())
+	{
+		debugf(1, "plot TidalStream %s\n", (const char*)tsp->getName());
+		// Where is this tidal stream
+		lat = tsp->getLat();
+		lon = tsp->getLon();
+		// Which port does this tidal stream reference
+		QString refstation = tsp->getRef();
+		// Find the port's nearest HW time
+		tideCalcPtr->findNearestHighWater(refstation, jtime, &tideHeight, &jtimeHW);
+		// Find the bearing and rate of the stream at that time in the cycle
+		minsFromHW = jtime - jtimeHW;
+		tsp->getStreamMinsFromRefAndMoon(minsFromHW, lunarPhaseFraction, &bearing, &rate);
+		length = rate * ARROW_SCALE;
+		qctimage->plotArrow(lat, lon, bearing, length);
+	}
+	qctimage->updateAfterPlot();
+//	qctimage->setUpdatesEnabled(true);
+//	qctimage->updateContents(); // flickers whole screen
+//	qctimage->viewport()->update(); // same as updateContents
+//	qctimage->update(); // does nothing if updates disabled during plotting
+}
+
+
+/* ----------------------------------------------------------------------------
+ * Change the central date
+ */
+void DisplayWindow::editDate()
+{
+	bool ok;
+	QDate dat = QDate::currentDate(), min, max;
+	dat = InputDialog::getDate("Date", "Choose date",
+		dat, min, max, QDateEdit::DMY, &ok, this, "dateedit");
+	if (!ok)
+		return;
+	slider_jtime = date_to_jtime(dat.year(), dat.month(), dat.day(), 12, 0.0);
+}
+
+
+/* ----------------------------------------------------------------------------
+ * Save, called from menu; saves the map display in a PNG image.
+ */
+void DisplayWindow::save()
+{
+	QString filename = QFileDialog::getSaveFileName(QString::null, "*.png", this, "savedialog");
+	if (!filename.isEmpty())
+	{
+		bool saved;
+		QApplication::setOverrideCursor(waitCursor);
+		saved = qctimage->save(filename, "PNG");
+		QApplication::restoreOverrideCursor();
+		if (!saved)
+			QMessageBox::warning(this, progname, "Error saving image");
+	}
+}
+
+
+/* ----------------------------------------------------------------------------
+ * Quit, called from menu, and from ~DisplayWindow when window manager kills me
+ */
+void DisplayWindow::quit()
+{
+	qApp->quit();
+}
+
+
+/* ----------------------------------------------------------------------------
+ * Display About box
+ */
+void DisplayWindow::about()
+{
+	QString msg=QString("xqct 1.00 (c) 2010 Andrew Brooks <arb@sat.dundee.ac.uk>\n"
+		"\n"
+		"This program displays QuickChart images and tidal information");
+    QMessageBox::about( this, progname, msg);
+}
+
+void DisplayWindow::helpmanual()
+{
+	static HelpDialog *helpdialog = new HelpDialog(this, "xqct.html");
+	helpdialog->show();
+}
