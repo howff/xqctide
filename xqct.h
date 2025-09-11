@@ -2,8 +2,8 @@
 #define XQCT_H
 
 #include "satlib/dundee.h"
-#include <qmainwindow.h>
-#include <qpixmap.h>
+#include <QMainWindow>
+#include <QPixmap>
 
 
 /*
@@ -13,7 +13,7 @@
 
 class QLabel;
 class QPainter;
-class QPopupMenu;
+class QMenu;
 class QSlider;
 //class QSettings;
 class KConfig; // replaces QSettings
@@ -77,8 +77,8 @@ private slots:
 
 private:
 	// Constructing the GUI
-	QPopupMenu *editMenu, *viewMenu, *tidalLevelMenu, *tidalStreamMenu;
-	QPopupMenu *mapContextMenu; //, *tidalLevelContextMenu, *tidalStreamContextMenu;
+	QMenu *editMenu, *viewMenu, *tidalLevelMenu, *tidalStreamMenu;
+	QMenu *mapContextMenu; //, *tidalLevelContextMenu, *tidalStreamContextMenu;
 	QLabel *dateLabel, *latlonDegLabel, *latlonDMSLabel, *bngLabel;
 	KConfig *settings; // was QSettings*
 	MRUMenu *mruMenu;
@@ -94,8 +94,8 @@ private:
 	MoonCalc *moonCalcPtr;
 
 	// List of tidal streams on the currently-displayed map
-	QPtrList<TidalLevel>  tidalLevelList;
-	QPtrList<TidalStream> tidalStreamList;
+	QList<TidalLevel*>  tidalLevelList;
+	QList<TidalStream*> tidalStreamList;
 
 	// Slider time at the left and minutes offset
 	double slider_jtime;

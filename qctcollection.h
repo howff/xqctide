@@ -49,13 +49,13 @@ public:
 	QCTCollectionWorker();
 	~QCTCollectionWorker();
 	void setPaths(QStringList);
-	void setMapList(QPtrList<QCTCollectionMap>*);
+	void setMapList(QList<QCTCollectionMap*>*);
 	void run(); // this will run in the "background" but must sleep to relinquish CPU
 	void hurryUp();
 private:
 	bool stillBackgroundThread;             // true in background, false for faster foreground
 	QStringList mapPaths;                   // directories in which to look for maps
-	QPtrList<QCTCollectionMap> *qctlistptr; // pointer to the QCTCollection list of maps
+	QList<QCTCollectionMap*> *qctlistptr; // pointer to the QCTCollection list of maps
 };
 
 
@@ -76,7 +76,7 @@ public:
 private:
 	QStringList mapPaths;                // directories in which to look for maps
 	QCTCollectionWorker worker;          // populates qctlist in the background
-	QPtrList<QCTCollectionMap> qctlist;  // list of maps
+	QList<QCTCollectionMap*> qctlist;  // list of maps
 };
 
 

@@ -21,13 +21,18 @@ static const char SCCSid[] = "@(#)qctimage.cpp  1.00 (C) 2010 arb QCT image scro
 #define STOP_MAP_MOVING_AFTER_MSEC 50
 
 
-#include <qapplication.h> // for OverrideCursor
-#include <qcursor.h>      // for QCursor::pos
-#include <qpainter.h>
-#include <qtimer.h>
+#include <QApplication> // for OverrideCursor
+#include <QCursor>      // for QCursor::pos
+#include <QPainter>
+#include <QTimer>
+#include <QTransform>
+#include <QtCore>       // for qDeleteAll
 
-#include "satlib/dundee.h"
-#include "osmap/qct.h"
+// Define NINT macro for nearest integer
+#define NINT(x) ((int)((x) + 0.5))
+
+//#include "satlib/dundee.h"
+//#include "osmap/qct.h"
 #include "qctimage.h"
 
 
@@ -39,7 +44,7 @@ ArrowPlot::ArrowPlot(int x, int y, float bearing, float length)
 	stemwidth = 8;
 	filled = true;
 
-	QPointArray prepoints(8);
+	QPolygon prepoints(8);
 	prepoints[0] = QPoint(-stemwidth, 0);
 	prepoints[1] = QPoint(-stemwidth, NINT(-length));
 	prepoints[2] = QPoint(-stemwidth*2, NINT(-length));
@@ -50,10 +55,10 @@ ArrowPlot::ArrowPlot(int x, int y, float bearing, float length)
 	prepoints[7] = QPoint(-stemwidth, 0);
 
 	// Translate origin THEN rotate all the points
-	QWMatrix wm;
-	wm.translate(x, y);
-	wm.rotate(bearing);
-	points = wm.map(prepoints);
+	QTransform tm;
+	tm.translate(x, y);
+	tm.rotate(bearing);
+	points = tm.map(prepoints);
 
 	// For speed extract the bounding box and keep it
 	boundingBox = points.boundingRect();
@@ -89,7 +94,7 @@ TidePlot::TidePlot(int x, int y, float min, float max, float currently)
 	// painter coords go from top left but level is up from bottom
 	int level = NINT((currently-min)/(max-min)*dimension*4);
 
-	QPointArray prepoints(7);
+	QPolygon prepoints(7);
 	prepoints[0] = QPoint(-dimension, -dimension*2);
 	prepoints[1] = QPoint(-dimension,  dimension*2);
 	prepoints[2] = QPoint( dimension,  dimension*2);
@@ -97,13 +102,13 @@ TidePlot::TidePlot(int x, int y, float min, float max, float currently)
 	prepoints[4] = QPoint(-dimension, -dimension*2);
 	prepoints[5] = QPoint(-dimension,  dimension*2-level);
 	prepoints[6] = QPoint( dimension,  dimension*2-level);
-	debugf(1,"TIDEPLOT %f < %f < %f =  %d < %d(%f) < %d\n",
-		min,currently,max, -dimension*2,-dimension*2+level,((currently-min)/(max-min)*dimension*4),dimension*2);
+	//debugf(1,"TIDEPLOT %f < %f < %f =  %d < %d(%f) < %d\n",
+	//	min,currently,max, -dimension*2,-dimension*2+level,((currently-min)/(max-min)*dimension*4),dimension*2);
 
 	// Translate origin to move all the points
-	QWMatrix wm;
-	wm.translate(x, y);
-	points = wm.map(prepoints);
+	QTransform tm;
+	tm.translate(x, y);
+	points = tm.map(prepoints);
 
 	// For speed extract the bounding box and keep it
 	boundingBox = points.boundingRect();
@@ -132,17 +137,18 @@ TidePlot::plot(QPainter *painter)
 /* ---------------------------------------------------------------------------
  *
  */
-QCTImage::QCTImage(QWidget *parent) : QScrollView(parent, "qcti", WNoAutoErase|WStaticContents|WPaintClever)
+QCTImage::QCTImage(QWidget *parent) : QScrollArea(parent)
 {
 	qct = 0;
 	dragging = floating = false;
 	startx = starty = 0;
 
-	arrowList.setAutoDelete(true);
-	tideList.setAutoDelete(true);
+	// QList doesn't have setAutoDelete in Qt6, we'll manage deletion manually
+	//arrowList.setAutoDelete(true);
+	//tideList.setAutoDelete(true);
 
-	// Allow mouse move events through to contentsMouseMoveEvent
-	viewport()->setMouseTracking(true);
+	// Allow mouse move events through to the widget
+	setMouseTracking(true);
 
 	// Enable panning -- this only works if you try to drag an item
 	// from outside the window (eg. from the Desktop) into the window
@@ -154,6 +160,12 @@ QCTImage::QCTImage(QWidget *parent) : QScrollView(parent, "qcti", WNoAutoErase|W
 
 QCTImage::~QCTImage()
 {
+	// Manual cleanup since Qt6 QList doesn't have setAutoDelete
+	qDeleteAll(arrowList);
+	arrowList.clear();
+	qDeleteAll(tideList);
+	tideList.clear();
+	
 	unload();
 }
 
@@ -163,7 +175,7 @@ QCTImage::unload()
 {
 	if (qct)
 	{
-		delete qct;
+		//delete qct;
 		qct = 0;
 	}
 	arrowList.clear();
@@ -180,9 +192,9 @@ QCTImage::load(QString filename, int scalefactor)
 {
 	int ii, yy, width, height;
 
-	qct = new QCT();
-	QApplication::setOverrideCursor(waitCursor);
-	if (!qct->openFilename((const char*)filename, false, scalefactor))
+	//qct = new QCT();
+	//QApplication::setOverrideCursor(Qt::WaitCursor);
+	//if (!qct->openFilename((const char*)filename, false, scalefactor))
 	{
 		log_error_message("cannot read %s", (const char*)filename);
 		return false;

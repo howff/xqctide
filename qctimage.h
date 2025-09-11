@@ -5,11 +5,11 @@
 #ifndef QCTIMAGE_H
 #define QCTIMAGE_H
 
-#include <qdatetime.h>    // for QTime
-#include <qscrollview.h>  // base class
-#include <qpixmap.h>
-#include <qimage.h>
-#include <qpointarray.h>
+#include <QDateTime>    // for QTime
+#include <QScrollArea>  // base class
+#include <QPixmap>
+#include <QImage>
+#include <QPolygon>
 
 class QPainter;
 class QCT;
@@ -27,7 +27,7 @@ private:
 	int stemwidth;
 	bool filled;
 	// the array of transformed points and a quick-access bounding box
-	QPointArray points;
+	QPolygon points;
 	QRect boundingBox;
 };
 
@@ -43,12 +43,12 @@ private:
 	// constant data could be made static to the class
 	int dimension;
 	// the array of transformed points and a quick-access bounding box
-	QPointArray points;
+	QPolygon points;
 	QRect boundingBox;
 };
 
 
-class QCTImage : public QScrollView
+class QCTImage : public QScrollArea
 {
 	Q_OBJECT
 public:
@@ -98,8 +98,8 @@ private:
 	// Initialisation only
 	int startx, starty;
 	// List of arrows to be overlaid
-	QPtrList<ArrowPlot> arrowList;
-	QPtrList<TidePlot>  tideList;
+	QList<ArrowPlot*> arrowList;
+	QList<TidePlot*>  tideList;
 };
 
 
