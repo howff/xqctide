@@ -100,7 +100,7 @@ static const char SCCSid[] = "@(#)xqct.cpp      1.01 (C) 2010 arb QuickChart dis
 #include <QMenu>
 #include <QPaintDevice> // for printing
 #include <QPrinter>     // for printing
-#include <QRegExp>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QSlider>
 #include <QStatusBar>
@@ -113,20 +113,20 @@ static const char SCCSid[] = "@(#)xqct.cpp      1.01 (C) 2010 arb QuickChart dis
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include "satlib/dundee.h"
-#include "satqt/qapp.h"        // for UNICODE_ definitions
-#include "satqt/helpdialog.h"
-#include "satqt/mrumenu.h"
-#include "satqt/inputdialog.h"
-#include "satqt/qzip.h"
-#include "satqt/calendardialog.h"
-#include "satqt/fileopen.xpm"
-#include "satqt/filesave.xpm"
-#include "satqt/fileprint.xpm"
-#include "satqt/calendaricon3.xpm"
-#include "osmap/qct.h"
-#include "satqt/kconfig.h"            // for KAutoConfig
-#include "satqt/kautoconfigdialog.h"  // for KAutoConfig
+//#include "satlib/dundee.h"
+//#include "satqt/qapp.h"        // for UNICODE_ definitions
+//#include "satqt/helpdialog.h"
+//#include "satqt/mrumenu.h"
+//#include "satqt/inputdialog.h"
+//#include "satqt/qzip.h"
+//#include "satqt/calendardialog.h"
+//#include "satqt/fileopen.xpm"
+//#include "satqt/filesave.xpm"
+//#include "satqt/fileprint.xpm"
+//#include "satqt/calendaricon3.xpm"
+//#include "osmap/qct.h"
+//#include "satqt/kconfig.h"            // for KAutoConfig
+//#include "satqt/kautoconfigdialog.h"  // for KAutoConfig
 #include "configdialog.h"                   // ditto
 #include "qctimage.h"
 #include "qctcollection.h"
