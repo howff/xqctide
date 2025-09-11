@@ -26,8 +26,8 @@ static const char SCCSid[] = "@(#)qctimage.cpp  1.00 (C) 2010 arb QCT image scro
 #include <qpainter.h>
 #include <qtimer.h>
 
-#include "satlib/dundee.h"
-#include "osmap/qct.h"
+//#include "satlib/dundee.h"
+//#include "osmap/qct.h"
 #include "qctimage.h"
 
 

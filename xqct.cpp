@@ -89,6 +89,7 @@ static const char SCCSid[] = "@(#)xqct.cpp      1.01 (C) 2010 arb QuickChart dis
 #include <QFile>
 #include <QFileDialog>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QVBoxLayout>
@@ -203,93 +204,108 @@ DisplayWindow::DisplayWindow()
 
 	// Create "File" menu
 	QMenu * fileMenu = new QMenu( this );
-	menuBar()->insertItem( "&File", fileMenu );
+	menuBar()->addMenu("&File", fileMenu);
 	mruMenu = new MRUMenu(this, settings, NULL);
 	// mruMenu->setShortcuts(true); // useless as only activated after menu shown!
 	connect(mruMenu, SIGNAL(activatedText(const QString &, const QString &)), this, SLOT(loadNewMapFile(const QString &, const QString &)));
 
-	fileMenu->insertItem( "&Open Map...", this, SLOT( loadMap() ), CTRL+Key_O );
-	fileMenu->insertItem( "&Open Recent Map",  mruMenu );
-	fileMenu->insertItem( "&Save Map As...", this, SLOT( saveScreen() ), CTRL+Key_S );
-	//fileMenu->insertItem( "&Save Map As...", this, SLOT( saveMap() ), CTRL+Key_S );
-	//fileMenu->insertItem( "Print Whole Map...", this, SLOT( printMap() ) ); // usually too big to be useful
-	fileMenu->insertItem( "&Print Map...", this, SLOT( printScreen() ), CTRL+Key_P );
-	fileMenu->insertSeparator();
-	fileMenu->insertItem( "&Quit", this, SLOT( quit() ), CTRL+Key_Q );
+	fileMenu->addAction( "&Open Map...", this, SLOT( loadMap() ), QKeySequence::Open );
+	fileMenu->addMenu( mruMenu )->setText("&Open Recent Map");
+	fileMenu->addAction( "&Save Map As...", this, SLOT( saveScreen() ), QKeySequence::Save );
+	//fileMenu->addAction( "&Save Map As...", this, SLOT( saveMap() ), QKeySequence::Save );
+	//fileMenu->addAction( "Print Whole Map...", this, SLOT( printMap() ) ); // usually too big to be useful
+	fileMenu->addAction( "&Print Map...", this, SLOT( printScreen() ), QKeySequence::Print );
+	fileMenu->addSeparator();
+	fileMenu->addAction( "&Quit", this, SLOT( quit() ), QKeySequence::Quit );
 
 
 	// Create "Edit" menu
 	editMenu = new QMenu( this );
-	menuBar()->insertItem( "&Edit", editMenu );
-	id = editMenu->insertItem( "&Date...", this, SLOT( editDate() ), CTRL+Key_D);
-	id = editMenu->insertItem( "&Preferences", this, SLOT( editPrefs() ));
+	menuBar()->addMenu("&Edit", editMenu);
+	editMenu->addAction( "&Date...", this, SLOT( editDate() ), QKeySequence("Ctrl+D"));
+	editMenu->addAction( "&Preferences", this, SLOT( editPrefs() ));
 	// XXX whatsThis
 
 
 	// Create "View" menu
 	viewMenu = new QMenu( this );
-	menuBar()->insertItem( "&View", viewMenu );
+	menuBar()->addMenu("&View", viewMenu);
 
 	tidalLevelMenu = new QMenu(viewMenu);
 	connect(tidalLevelMenu, SIGNAL(aboutToShow()), this, SLOT(showTidalLevelMenu()));
-	id = viewMenu->insertItem("Tidal &Level Locations", tidalLevelMenu);
+	viewMenu->addMenu(tidalLevelMenu)->setText("Tidal &Level Locations");
 
 	tidalStreamMenu = new QMenu(viewMenu);
 	connect(tidalStreamMenu, SIGNAL(aboutToShow()), this, SLOT(showTidalStreamMenu()));
-	id = viewMenu->insertItem("Tidal &Diamond", tidalStreamMenu);
+	viewMenu->addMenu(tidalStreamMenu)->setText("Tidal &Diamond");
 
 	// Create "Zoom" menu
 	QMenu *zoomMenu = new QMenu(viewMenu);
-	id = zoomMenu->insertItem("&Full size",    this, SLOT(changeZoom(int)), 0, 1);
-	id = zoomMenu->insertItem("&Half size",    this, SLOT(changeZoom(int)), 0, 2);
-	id = zoomMenu->insertItem("&Quarter size", this, SLOT(changeZoom(int)), 0, 4);
-	id = zoomMenu->insertItem("&Eighth size",  this, SLOT(changeZoom(int)), 0, 8);
-	id = viewMenu->insertItem("&Zoom", zoomMenu);
+	QAction *zoom1 = zoomMenu->addAction("&Full size");
+	QAction *zoom2 = zoomMenu->addAction("&Half size");
+	QAction *zoom4 = zoomMenu->addAction("&Quarter size");
+	QAction *zoom8 = zoomMenu->addAction("&Eighth size");
+	connect(zoom1, &QAction::triggered, [this]() { changeZoom(1); });
+	connect(zoom2, &QAction::triggered, [this]() { changeZoom(2); });
+	connect(zoom4, &QAction::triggered, [this]() { changeZoom(4); });
+	connect(zoom8, &QAction::triggered, [this]() { changeZoom(8); });
+	viewMenu->addMenu(zoomMenu)->setText("&Zoom");
 
 	// Create "Help" menu
 	QMenu * helpMenu = new QMenu( this );
-	menuBar()->insertSeparator();
-	menuBar()->insertItem( "&Help", helpMenu );
+	menuBar()->addSeparator();
+	menuBar()->addMenu("&Help", helpMenu);
 
-	helpMenu->insertItem( "&About", this, SLOT(about()), Key_F1 );
-	helpMenu->insertItem( "&Manual", this, SLOT(helpmanual()) );
-	helpMenu->insertSeparator();
-	helpMenu->insertItem( "What's &This", this, SLOT(whatsThis()), SHIFT+Key_F1 );
+	helpMenu->addAction( "&About", this, SLOT(about()), QKeySequence::HelpContents );
+	helpMenu->addAction( "&Manual", this, SLOT(helpmanual()) );
+	helpMenu->addSeparator();
+	helpMenu->addAction( "What's &This", this, SLOT(whatsThis()), QKeySequence("Shift+F1") );
 
-	QToolBar * fileTools = new QToolBar( this, "chart toolbar" );
-	fileTools->setLabel( "Chart Toolbar" );
-	new QToolButton( QPixmap(fileopen), "Open Map", QString::null,
-		this, SLOT(loadMap()), fileTools, "open map" );
-	new QToolButton( QPixmap(filesave), "Save Map", QString::null,
-		this, SLOT(saveScreen()), fileTools, "save map" );
-	new QToolButton( QPixmap(fileprint), "Print Map", QString::null,
-		this, SLOT(printScreen()), fileTools, "print map" );
-	new QToolButton( QPixmap(calendaricon3), "Change Date", QString::null,
-		this, SLOT(editDate()), fileTools, "change date" );
+	QToolBar * fileTools = addToolBar("Chart Toolbar");
+	fileTools->addAction(QIcon(QPixmap(fileopen)), "Open Map", this, SLOT(loadMap()));
+	fileTools->addAction(QIcon(QPixmap(filesave)), "Save Map", this, SLOT(saveScreen()));
+	fileTools->addAction(QIcon(QPixmap(fileprint)), "Print Map", this, SLOT(printScreen()));
+	fileTools->addAction(QIcon(QPixmap(calendaricon3)), "Change Date", this, SLOT(editDate()));
 
 	// Main window contains a vertical box which groups:
 	// the map image, a slider, a label (status bar is at bottom)
-	QVBox *main = new QVBox(this);
+	QWidget *main = new QWidget(this);
+	QVBoxLayout *mainLayout = new QVBoxLayout(main);
 
 	qctimage = new QCTImage(main);
+	mainLayout->addWidget(qctimage);
 	// for information:
 	//qctimage->getQct()->printMetadata(stdout);
 	connect(qctimage, SIGNAL(location(double,double,long)), this, SLOT(mouse_moved(double,double)));
 	connect(qctimage, SIGNAL(mouseWheel(Qt::Orientation, int)), this, SLOT(mouse_wheel(Qt::Orientation, int)));
 	connect(qctimage, SIGNAL(contextMenu(double,double)), this, SLOT(context_menu(double,double)));
 
-	slider = new QSlider(0, TIDECALC_PERDAY*3-1, 60/TIDECALC_INTERVAL_MINS, 0, QSlider::Horizontal, main, "slider");
+	slider = new QSlider(Qt::Horizontal, main);
+	slider->setRange(0, TIDECALC_PERDAY*3-1);
+	slider->setPageStep(60/TIDECALC_INTERVAL_MINS);
+	slider->setValue(0);
 	slider->setFocus();
 	slider->setTickInterval(6);
-	slider->setTickmarks(QSlider::Below);
+	slider->setTickPosition(QSlider::TicksBelow);
+	mainLayout->addWidget(slider);
 	connect(slider, SIGNAL(valueChanged(int)), this, SLOT(slider_moved(int)));
 
 	// Coordinate display
-	QHBox *infobox = new QHBox(main);
-	dateLabel = new QLabel(infobox, "dat"); dateLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
-	latlonDegLabel = new QLabel(infobox, "deg"); latlonDegLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
-	latlonDMSLabel = new QLabel(infobox, "dms"); latlonDMSLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
-	bngLabel = new QLabel(infobox, "bng"); bngLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+	QWidget *infobox = new QWidget(main);
+	QHBoxLayout *infoLayout = new QHBoxLayout(infobox);
+	dateLabel = new QLabel(infobox); 
+	dateLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+	latlonDegLabel = new QLabel(infobox); 
+	latlonDegLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+	latlonDMSLabel = new QLabel(infobox); 
+	latlonDMSLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+	bngLabel = new QLabel(infobox); 
+	bngLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+	infoLayout->addWidget(dateLabel);
+	infoLayout->addWidget(latlonDegLabel);
+	infoLayout->addWidget(latlonDMSLabel);
+	infoLayout->addWidget(bngLabel);
+	mainLayout->addWidget(infobox);
 
 	// Choose the coming Saturday
 	QDate today = QDate::currentDate();

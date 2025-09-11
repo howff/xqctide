@@ -7,7 +7,7 @@ static const char SCCSid[] = "@(#)main.cpp      1.00 (C) 2010 arb XQCT";
 #include <QSplashScreen>
 #include <QApplication>
 #include <QPixmap>
-#include "satlib/dundee.h"
+//#include "satlib/dundee.h"
 #include "xqct.h"
 
 
@@ -15,7 +15,7 @@ int
 main(int argc, char **argv)
 {
 	// Global initialisations
-	set_program_name(argv[0], NULL);
+	//set_program_name(argv[0], NULL);
 
 	QApplication app(argc, argv);
 

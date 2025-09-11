@@ -1,9 +1,9 @@
-QT          += widgets core gui
+QT          += widgets core gui printsupport
 TEMPLATE    = app
 CONFIG      += qt warn_on debug thread unzip #exeprofile
 DEFINES     += DEBUG
-INCLUDEPATH += $(SWDEV)
-LIBS        += -lsatqt -losmap -lsat -lutils -lgif -larb -ltcd
+#INCLUDEPATH += $(SWDEV)
+#LIBS        += -lsatqt -losmap -lsat -lutils -lgif -larb -ltcd
 FORMS       += configdialog.ui
 HEADERS     = xqct.h   qctimage.h   tidedata.h   tidecalc.h   qctcollection.h
 SOURCES     = xqct.cpp qctimage.cpp tidedata.cpp tidecalc.cpp qctcollection.cpp
