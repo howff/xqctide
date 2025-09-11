@@ -1,3 +1,4 @@
+QT          += widgets core gui
 TEMPLATE    = app
 CONFIG      += qt warn_on debug thread
 DEFINES     += DEBUG MAIN

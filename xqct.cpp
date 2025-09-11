@@ -82,33 +82,32 @@ static const char SCCSid[] = "@(#)xqct.cpp      1.01 (C) 2010 arb QuickChart dis
  */
 
 
-#include <qaccel.h>
-#include <qapplication.h>
-#include <qcolordialog.h>
-#include <qdragobject.h>
-#include <qfile.h>
-#include <qfiledialog.h>
-#include <qgrid.h>
-#include <qinputdialog.h>
-#include <qkeycode.h>
-#include <qlabel.h>
-#include <qlayout.h>
-#include <qmenubar.h>
-#include <qmessagebox.h>
-#include <qpainter.h>
-#include <qpixmap.h>
-#include <qpopupmenu.h>
-#include <qpaintdevicemetrics.h> // for printing
-#include <qprinter.h>            // for printing
-#include <qregexp.h>
-#include <qsettings.h>
-#include <qslider.h>
-#include <qstatusbar.h>
-#include <qtimer.h>
-#include <qtoolbar.h>
-#include <qtoolbutton.h>
-#include <qvbox.h>
-#include <qwhatsthis.h>
+#include <QKeySequence>
+#include <QApplication>
+#include <QColorDialog>
+#include <QMimeData>
+#include <QFile>
+#include <QFileDialog>
+#include <QGridLayout>
+#include <QInputDialog>
+#include <QLabel>
+#include <QVBoxLayout>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QPainter>
+#include <QPixmap>
+#include <QMenu>
+#include <QPaintDevice> // for printing
+#include <QPrinter>     // for printing
+#include <QRegExp>
+#include <QSettings>
+#include <QSlider>
+#include <QStatusBar>
+#include <QTimer>
+#include <QToolBar>
+#include <QToolButton>
+#include <QWidget>
+#include <QWhatsThis>
 
 #include <stdio.h>
 #include <string.h>
@@ -203,7 +202,7 @@ DisplayWindow::DisplayWindow()
 	loadSettings();
 
 	// Create "File" menu
-	QPopupMenu * fileMenu = new QPopupMenu( this );
+	QMenu * fileMenu = new QMenu( this );
 	menuBar()->insertItem( "&File", fileMenu );
 	mruMenu = new MRUMenu(this, settings, NULL);
 	// mruMenu->setShortcuts(true); // useless as only activated after menu shown!
@@ -220,7 +219,7 @@ DisplayWindow::DisplayWindow()
 
 
 	// Create "Edit" menu
-	editMenu = new QPopupMenu( this );
+	editMenu = new QMenu( this );
 	menuBar()->insertItem( "&Edit", editMenu );
 	id = editMenu->insertItem( "&Date...", this, SLOT( editDate() ), CTRL+Key_D);
 	id = editMenu->insertItem( "&Preferences", this, SLOT( editPrefs() ));
@@ -228,19 +227,19 @@ DisplayWindow::DisplayWindow()
 
 
 	// Create "View" menu
-	viewMenu = new QPopupMenu( this );
+	viewMenu = new QMenu( this );
 	menuBar()->insertItem( "&View", viewMenu );
 
-	tidalLevelMenu = new QPopupMenu(viewMenu);
+	tidalLevelMenu = new QMenu(viewMenu);
 	connect(tidalLevelMenu, SIGNAL(aboutToShow()), this, SLOT(showTidalLevelMenu()));
 	id = viewMenu->insertItem("Tidal &Level Locations", tidalLevelMenu);
 
-	tidalStreamMenu = new QPopupMenu(viewMenu);
+	tidalStreamMenu = new QMenu(viewMenu);
 	connect(tidalStreamMenu, SIGNAL(aboutToShow()), this, SLOT(showTidalStreamMenu()));
 	id = viewMenu->insertItem("Tidal &Diamond", tidalStreamMenu);
 
 	// Create "Zoom" menu
-	QPopupMenu *zoomMenu = new QPopupMenu(viewMenu);
+	QMenu *zoomMenu = new QMenu(viewMenu);
 	id = zoomMenu->insertItem("&Full size",    this, SLOT(changeZoom(int)), 0, 1);
 	id = zoomMenu->insertItem("&Half size",    this, SLOT(changeZoom(int)), 0, 2);
 	id = zoomMenu->insertItem("&Quarter size", this, SLOT(changeZoom(int)), 0, 4);
@@ -248,7 +247,7 @@ DisplayWindow::DisplayWindow()
 	id = viewMenu->insertItem("&Zoom", zoomMenu);
 
 	// Create "Help" menu
-	QPopupMenu * helpMenu = new QPopupMenu( this );
+	QMenu * helpMenu = new QMenu( this );
 	menuBar()->insertSeparator();
 	menuBar()->insertItem( "&Help", helpMenu );
 
@@ -513,10 +512,10 @@ DisplayWindow::context_menu(double latN, double lonE)
 	debugf(1,"ContextMenu %f %f\n", latN, lonE);
 
 	// Create a menu
-	QPopupMenu *contextMenu = new QPopupMenu(this);
+	QMenu *contextMenu = new QMenu(this);
 
 	// Add a submenu listing available maps
-	mapContextMenu = new QPopupMenu(contextMenu);
+	mapContextMenu = new QMenu(contextMenu);
 	id = contextMenu->insertItem("Maps at cursor", mapContextMenu);
 
 	QStringList maps = mapCollectionPtr->mapsListAtLatLon(latN, lonE);
