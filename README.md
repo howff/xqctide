@@ -14,4 +14,5 @@ The program was originally written with Qt version 3.
 sudo apt install libtcd-dev xtide
 ln -sf /usr/bin/tide ./tide
 export HFILE_PATH=$(pwd)/harmonics-dwf-20091227-nonfree.tcd
+bunzip2 BA1481_1.qct.bz2
 ```
