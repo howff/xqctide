@@ -31,3 +31,8 @@ qmake3 -o Makefile.${SWDEVARCH} xqct.pro
 # Maybe edit Makefile.LINUX to add -fpermissive` and perhaps `-std=gnu99`
 make -f Makefile.${SWDEVARCH}
 ```
+
+# Debugging
+
+`export DEBUG=`
+
