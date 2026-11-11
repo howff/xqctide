@@ -16,3 +16,18 @@ ln -sf /usr/bin/tide ./tide
 export HFILE_PATH=$(pwd)/harmonics-dwf-20091227-nonfree.tcd
 bunzip2 BA1481_1.qct.bz2
 ```
+
+## Building
+
+You will need satlib, and qt3 ready built in /opt/DSSingest
+```
+export SWDEV=~/src/dss/src
+export SWDEVARCH=LINUX
+export SWDEVLOCAL=/opt/DSSingest
+export QTDIR=$SWDEVLOCAL/qt3
+export QMAKESPEC=${QTDIR}/mkspecs/linux-g++
+export PATH=${PATH}:${QTDIR}/bin:${SWDEVLOCAL}/bin
+qmake3 -o Makefile.${SWDEVARCH} xqct.pro
+# Maybe edit Makefile.LINUX to add -fpermissive` and perhaps `-std=gnu99`
+make -f Makefile.${SWDEVARCH}
+```
